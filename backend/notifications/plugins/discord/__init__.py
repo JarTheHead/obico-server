@@ -52,6 +52,10 @@ class DiscordNotificationPlugin(BaseNotificationPlugin):
         webhook.add_embed(embed)
         webhook.execute()
 
+    def get_user_mention(self, context) -> str:
+        name = f"<@{context.user.discord_username}>" if context.user.discord_username else context.user.first_name or ''
+        return f"Hi {name}"
+
     def send_failure_alert(self, context: FailureAlertContext) -> None:
         if 'webhook_url' not in context.config:
             return
@@ -67,7 +71,7 @@ class DiscordNotificationPlugin(BaseNotificationPlugin):
         if not text:
             return
 
-        text = f"Hi {context.user.first_name or ''},\n{text}"
+        text = f"{self.get_user_mention(context)}\n{text}"
 
         self.call_webhook(
             context.user.syndicate_name,
@@ -87,7 +91,7 @@ class DiscordNotificationPlugin(BaseNotificationPlugin):
         if not text:
             return
 
-        text = f"Hi {context.user.first_name or ''},\n{text}"
+        text = f"{self.get_user_mention(context)}\n{text}"
 
         self.call_webhook(
             context.user.syndicate_name,

@@ -47,6 +47,7 @@ class UserContext:
     unsub_token: str
     dh_balance: float
     is_pro: bool
+    discord_username: Optional[str] = None
 
 
 @dataclasses.dataclass(frozen=True)
