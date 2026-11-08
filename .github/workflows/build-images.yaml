@@ -4,10 +4,10 @@ name: Build and publish images
 # them from source. This workflow builds them from the current source and
 # publishes them, tagged and cosign-signed, to GHCR so Kubernetes/Helm users
 # can consume them. The ml-api service has several hardware variants; the ones
-# built here are the slim CPU/ONNX image, the CUDA image and the Jetson/L4T
-# image. RK3588 is not built here. The workflow also publishes
-# the in-repo Helm chart as a signed OCI artifact with exact image tags baked
-# in.
+# built here are the slim CPU/ONNX image, the CUDA image and the two Jetson/L4T
+# images, one per JetPack major. RK3588 is not built here. The workflow also
+# publishes the in-repo Helm chart as a signed OCI artifact with exact image
+# tags baked in.
 
 on:
   # The release branch is the deploy branch; rebuild whenever it moves.
@@ -488,11 +488,17 @@ jobs:
           IMMUTABLE: ${{ needs.version.outputs.ns }}/obico-${{ matrix.name }}:${{ needs.version.outputs.version }}-g${{ needs.version.outputs.short_sha }}
         run: docker buildx imagetools inspect "${IMMUTABLE}" --format '{{json .Manifest}}' > /dev/null
 
-  # Single-platform images. CUDA is amd64 by nature. The Jetson build uses the
+  # Single-platform images. CUDA is amd64 by nature. The Jetson builds use the
   # same Dockerfile: on linux/arm64 its FROM resolves the ml_api_base manifest
   # to the arm64 half, which is the L4T/JetPack base, so the one file produces
   # both. Publishing the result as obico-ml-api-jetson keeps the hardware
   # target visible instead of hiding it in a manifest list's arm64 slot.
+  #
+  # There are two of them because there are two JetPack majors in the field and
+  # an L4T container only runs on the BSP it was built for. ml-api-jetson is the
+  # JetPack 4.6 base the arm64 half of the manifest resolves to; ml-api-jetson-jp6
+  # passes IMAGE_TAG_SUFFIX=-jp6 to build on the JetPack 6 base instead. Neither
+  # image runs on the other's board, so the names have to stay distinct.
   #
   # Jetson is best-effort: it is exercised as a CI build only, never runtime
   # tested on hardware, and its base is old enough that a broken upstream
@@ -532,6 +538,10 @@ jobs:
             # differ in exactly this, and it should be readable as a pair.
             best_effort: false
           - name: ml-api-jetson
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            best_effort: true
+          - name: ml-api-jetson-jp6
             platform: linux/arm64
             runner: ubuntu-24.04-arm
             best_effort: true
@@ -662,9 +672,24 @@ jobs:
           REF: ${{ needs.version.outputs.ns }}/obico-${{ matrix.name }}@${{ steps.build.outputs.digest }}
         run: docker run --rm "${REF}" test -e /usr/lib/aarch64-linux-gnu/libdrm_tegra.so.0
 
-      # Both legs: neither base carries the Rockchip runtime, and the Jetson
-      # image is the one nothing ever starts, so it has the least verification
-      # to spare.
+      # The JetPack 6 image answers the same question differently, for the
+      # reason given in ci.yaml: libdrm_tegra is a JetPack 4.6 path and r36
+      # mounts the Tegra user space from the host. L4T rootfs plus CUDA 12 is
+      # what distinguishes it from a stock arm64 base and from the JetPack 4.6
+      # image above.
+      - name: Assert the image is built on L4T with CUDA 12
+        if: matrix.name == 'ml-api-jetson-jp6'
+        env:
+          REF: ${{ needs.version.outputs.ns }}/obico-${{ matrix.name }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker run --rm "${REF}" test -e /etc/nv_tegra_release
+          docker run --rm "${REF}" sh -c \
+            'ldconfig -p | grep -q "libcudart\.so\.12" || test -e /usr/local/cuda/targets/aarch64-linux/lib/libcudart.so.12'
+
+      # Every leg: no base here carries the Rockchip runtime, and the Jetson
+      # images are the ones nothing ever starts, so they have the least
+      # verification to spare.
       - name: Assert the RKNN weights were skipped
         env:
           REF: ${{ needs.version.outputs.ns }}/obico-${{ matrix.name }}@${{ steps.build.outputs.digest }}
@@ -719,6 +744,8 @@ jobs:
           - name: ml-api-gpu
           - name: ml-api-jetson
             best_effort: true
+          - name: ml-api-jetson-jp6
+            best_effort: true
     continue-on-error: ${{ matrix.best_effort || false }}
     steps:
       - name: Checkout
@@ -762,12 +789,13 @@ jobs:
             type=raw,value=${{ needs.version.outputs.version }}-g${{ needs.version.outputs.short_sha }}
             type=raw,value=sha-${{ needs.version.outputs.short_sha }}
             type=raw,value=release,enable={{is_default_branch}}
-            # No latest on the Jetson image: a bare docker pull lands on that
-            # tag, and this is the one image CI compiles without ever starting
-            # it. release is still published, because it has to be asked for
-            # by name, and a name someone types deliberately is one a caveat
-            # can be attached to.
-            type=raw,value=latest,enable=${{ github.ref_name == github.event.repository.default_branch && matrix.name != 'ml-api-jetson' }}
+            # No latest on either Jetson image: a bare docker pull lands on
+            # that tag, and these are the images CI compiles without ever
+            # starting. release is still published, because it has to be asked
+            # for by name, and a name someone types deliberately is one a
+            # caveat can be attached to. Matched by prefix so a third JetPack
+            # major does not silently acquire a latest.
+            type=raw,value=latest,enable=${{ github.ref_name == github.event.repository.default_branch && !startsWith(matrix.name, 'ml-api-jetson') }}
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3

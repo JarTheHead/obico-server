@@ -1,0 +1,71 @@
+# JetPack 6 (L4T r36.x) counterpart of Dockerfile.base_arm64, which is a
+# JetPack 4.6 rootfs. They are separate files rather than one with a build arg
+# because an L4T container only runs on the BSP it was built for: the CUDA and
+# Tegra user space in the image has to match the driver the board mounts in, so
+# there is no single base that serves both. What the two do share is the darknet
+# commit and the pip pins, which is why they are kept side by side.
+
+# The builder needs nvcc and the CUDA headers, and the runtime images carry
+# neither. l4t-jetpack is the full SDK container and is the documented place to
+# compile against JetPack 6; its size does not reach the published image because
+# only /darknet is copied out of it.
+FROM nvcr.io/nvidia/l4t-jetpack:r36.4.0 as darknet_builder_jetson_jp6
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt update && apt install -y ca-certificates build-essential gcc g++ cmake git
+WORKDIR /
+# Same commit as the JetPack 4.6 base, so both images run the same darknet.
+RUN git clone https://github.com/AlexeyAB/darknet && cd darknet && git checkout 59c86222c5387bffd9108a21885f80e980ece234
+# darknet's Makefile links with -L/usr/local/cuda/lib64, which on aarch64 L4T
+# is not where the libraries are. Same workaround as the JetPack 4.6 base, and
+# for the same reason: the stubs directory is what lets the GPU build resolve
+# the driver symbols at link time.
+ENV LIBRARY_PATH="${LIBRARY_PATH}:/usr/local/cuda/targets/aarch64-linux/lib:/usr/local/cuda/targets/aarch64-linux/lib/stubs"
+# compile CPU version
+RUN cd darknet \
+  && sed -i 's/LIBSO=0/LIBSO=1/' Makefile \
+  && make -j 4 && mv libdarknet.so libdarknet_cpu.so
+# compile GPU version
+RUN cd darknet \
+  && sed -i 's/GPU=0/GPU=1/' Makefile \
+  && sed -i 's/lcudart/lcudart_static -ldl -lrt/' Makefile \
+  && make -j 4 && mv libdarknet.so libdarknet_gpu.so
+
+# cuDNN stays off. The builder has the headers, but the runtime image below is
+# l4t-cuda, which carries no cuDNN at all, so a libdarknet_gpu.so linked against
+# it would fail to load on the board. darknet's CUDNN path is also not what this
+# project has ever run.
+#   && sed -i 's/CUDNN=0/CUDNN=1/' Makefile \
+#   && sed -i 's/CUDNN_HALF=0/CUDNN_HALF=1/' Makefile \
+
+# CUDA 12.6 runtime and the math libraries darknet links against, without the
+# TensorRT and cuDNN payload this image has no use for. The tag is the CUDA
+# release rather than the L4T revision: 12.6.11 is what the r36.4 BSP ships, and
+# CUDA 12.x has minor-version compatibility, so this image runs on any JetPack 6
+# board. The major version is the part that has to agree — a JetPack 5 board
+# (CUDA 11.4) or a JetPack 4.6 one (CUDA 10.2) cannot load it, which is why the
+# JetPack 4.6 base is a separate file rather than a tag on this one.
+FROM nvcr.io/nvidia/l4t-cuda:12.6.11-runtime as ml_api_base_jetson_jp6
+
+COPY --from=darknet_builder_jetson_jp6 /darknet /darknet
+
+WORKDIR /app
+RUN apt update && apt install --no-install-recommends -y ca-certificates python3-pip wget
+RUN pip install --upgrade pip
+# Same pin and same reason as the JetPack 4.6 base: 4.12 is the last 4.x that is
+# numpy-2 clean, and the wheel is abi3, so one version serves both bases despite
+# their different Python versions.
+RUN pip install opencv_python_headless==4.12.0.88
+# The CPU build from PyPI, rather than the Jetson GPU wheel the JetPack 4.6 base
+# downloads from a Box link. darknet is the backend this image runs; ONNX is the
+# fallback lib/detection_model.py reaches only after darknet has failed to load
+# both with and without the GPU, and a fallback that needs a wheel from a
+# third-party host is a build that breaks whenever that host does. Installing it
+# at all is what keeps the probe in ml_api/Dockerfile answering the same way
+# here as on every other base, so the ONNX weights are fetched rather than
+# silently skipped.
+RUN pip install onnxruntime==1.20.1
+
+ADD requirements.txt ./
+RUN pip install -r requirements.txt
+
+EXPOSE 3333

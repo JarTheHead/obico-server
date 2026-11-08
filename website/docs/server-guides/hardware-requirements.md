@@ -16,6 +16,12 @@ Raspberry Pi (any model) | ❌
 Latte Panda | ❌
 Jetson Nano 2gb | ❌
 Jetson Nano 4gb | ✅
+Jetson Orin Nano 4gb | ✅
+Jetson Orin Nano 8gb | ✅
+Jetson Orin NX | ✅
+Jetson AGX Orin | ✅
+Jetson Xavier NX | ✅
+Jetson AGX Xavier | ✅
 
 ## PC's (and laptops) {#pcs-and-laptops}
 

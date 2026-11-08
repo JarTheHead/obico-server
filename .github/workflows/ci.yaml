@@ -587,6 +587,16 @@ jobs:
             suffix: ""
             rknn: absent
             runner: ubuntu-24.04-arm
+          # The JetPack 6 counterpart, published under its own tag. A separate
+          # file and a separate base because an L4T container only runs on the
+          # BSP it was built for: the arm64 half above is a JetPack 4.6 rootfs,
+          # and nothing about it works on a board running L4T r36.
+          - name: jetson-jp6
+            file: ml_api/Dockerfile.base_arm64_jp6
+            tag: 1.4-jp6
+            suffix: -jp6
+            rknn: absent
+            runner: ubuntu-24.04-arm
           # The amd64 half, behind the published CUDA image. Nobody rebuilds
           # it between releases, so a break in it surfaces only when someone
           # cuts a new base by hand — which is why it is compiled here.
@@ -732,6 +742,23 @@ jobs:
         env:
           TAG: obico-ml-api-${{ matrix.name }}:verify
         run: docker run --rm "${TAG}" test -e /usr/lib/aarch64-linux-gnu/libdrm_tegra.so.0
+
+      # The same question for the JetPack 6 base, which cannot answer it the
+      # same way: libdrm_tegra is a JetPack 4.6 path, and on r36 the Tegra user
+      # space is mounted from the host at run time rather than baked into the
+      # image. What has to hold instead is that this is an L4T rootfs and that
+      # its CUDA is the 12.x the board's driver expects. A stock arm64 Ubuntu
+      # base fails both, and a JetPack 4.6 base fails the second — which is the
+      # substitution this leg exists to catch.
+      - name: Assert the base is L4T and carries CUDA 12
+        if: matrix.name == 'jetson-jp6'
+        env:
+          TAG: obico-ml-api-${{ matrix.name }}:verify
+        run: |
+          set -euo pipefail
+          docker run --rm "${TAG}" test -e /etc/nv_tegra_release
+          docker run --rm "${TAG}" sh -c \
+            'ldconfig -p | grep -q "libcudart\.so\.12" || test -e /usr/local/cuda/targets/aarch64-linux/lib/libcudart.so.12'
 
       # The mirror of the RKNN pair, for the two formats this base cannot
       # read either. Asserted on both sides: the rk3588 leg proves they are

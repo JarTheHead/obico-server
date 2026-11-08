@@ -21,7 +21,7 @@ echo "Avahi Succesfully set up"
 echo -e "Your computer is accesible at ${hostname}.local"
 
 while true; do
-    read -p "Would you like to configure this Jetson Nano so it can be addressed by 'obico.local' on your local network? [N/y/d]: " -e -i "N" ynd
+    read -p "Would you like to configure this Jetson device so it can be addressed by 'obico.local' on your local network? [N/y/d]: " -e -i "N" ynd
     case $ynd in
         [Yy]* ) avahi_modify host-name obico; hostname="obico"; printf "\nHostname set to obico.\n"; break;;
         [Nn]* ) break;;

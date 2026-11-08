@@ -15,14 +15,19 @@ Arguments:
 * -p PREFIX can be used to push images into a private repository or into a docker registry with a new name. Note that `ml_api/Dockerfile` hardcodes `thespaghettidetective/ml_api_base:1.4` in its `FROM`, so an image built under another prefix or version is not what a later `docker compose build ml_api` consumes unless you edit that line too.
 * -i flag is used to help Docker work with insecure (like local private) repositories
 
-The script builds one base per hardware target, and the tag suffix it produces is what selects a variant later: `ml_api/Dockerfile` takes an `IMAGE_TAG_SUFFIX` build arg and appends it to the base image tag, so `IMAGE_TAG_SUFFIX=-rk3588` builds against the RK3588 base. The suffix only picks the base; the RKNN model download keys off `rknn-toolkit-lite2` being importable in the base, which is what `ml_api/lib/rknn.py` needs, so the weights follow what the image can actually read whatever you named the tag.
+The script builds one base per hardware target, and the tag suffix it produces is what selects a variant later: `ml_api/Dockerfile` takes an `IMAGE_TAG_SUFFIX` build arg and appends it to the base image tag, so `IMAGE_TAG_SUFFIX=-rk3588` builds against the RK3588 base. `IMAGE_TAG_SUFFIX=-jp6` likewise builds against the JetPack 6 base, which is a separate image from the arm64 half of the `1.4` manifest: an L4T container only runs on the BSP it was built for, so the JetPack 4.6 rootfs that half carries cannot serve a board on L4T r36. The suffix only picks the base; the RKNN model download keys off `rknn-toolkit-lite2` being importable in the base, which is what `ml_api/lib/rknn.py` needs, so the weights follow what the image can actually read whatever you named the tag.
 
-Note that the `-rk3588` base is not published on Docker Hub — only `1.4` and `1.3` and their per-architecture tags are. `ml_api/Dockerfile` hardcodes the `thespaghettidetective` namespace in its `FROM`, so building that variant means producing the base locally under exactly the name it expects:
+Note that neither the `-rk3588` nor the `-jp6` base is published on Docker Hub — only `1.4` and `1.3` and their per-architecture tags are. `ml_api/Dockerfile` hardcodes the `thespaghettidetective` namespace in its `FROM`, so building either variant means producing the base locally under exactly the name it expects:
 
 ```bash
 cd ml_api && docker build --platform linux/arm64 -f Dockerfile.base_rk3588 \
   -t thespaghettidetective/ml_api_base:1.4-rk3588 .
+
+cd ml_api && docker build --platform linux/arm64 -f Dockerfile.base_arm64_jp6 \
+  -t thespaghettidetective/ml_api_base:1.4-jp6 .
 ```
+
+`scripts/install_on_jetson_jp6.sh` does the second of those for you when it cannot pull the image, so a JetPack 6 board needs no manual step.
 
 To run local registry, use: https://docs.docker.com/registry/deploying/
 Ex: `docker run -d -p 5000:5000 --restart=always --name registry registry:2`

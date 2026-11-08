@@ -7,7 +7,7 @@ title: Installation
 This is a general guide to install the Obico Server. For platform-specific guides:
 
 - [Obico installation guide for Windows Server](platform-specific/server_2019.md)
-- [Obico installation guide for NVIDIA Jetson Nano](platform-specific/jetson_guide.md)
+- [Obico installation guide for NVIDIA Jetson devices](platform-specific/jetson_guide.md)
 - [Obico installation guide for Unraid](platform-specific/unraid_guide.md)
 
 :::

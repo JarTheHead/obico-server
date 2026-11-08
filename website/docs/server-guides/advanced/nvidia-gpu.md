@@ -47,6 +47,14 @@ services:
 ```
 
 :::tip
+On a Jetson you do not have to write this by hand. `scripts/install_on_jetson_jp5.sh` and `scripts/install_on_jetson_jp6.sh` write it for you, along with the `ml_api` build argument that selects the base image matching your JetPack release. See [the Jetson guide](../platform-specific/jetson_guide.md).
+:::
+
+:::caution
+The `ml_api` image is built on an L4T base, and an L4T container only runs on the BSP it was built for. A JetPack 6 board needs the `-jp6` base, which the JetPack 6 installer selects with `IMAGE_TAG_SUFFIX=-jp6`; the default base is a JetPack 4.6 rootfs. Getting this wrong produces an image that builds and starts, then fails to load the model.
+:::
+
+:::tip
 Don't forget to restart the docker cluster by running `docker compose down && docker-compose up -d`.
 :::
 

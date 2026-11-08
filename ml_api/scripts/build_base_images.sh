@@ -39,3 +39,12 @@ RK3588_VERSION=${VERSION_BASE}-rk3588
 echo Building $RK3588_VERSION
 docker build --platform linux/arm64 -f Dockerfile.base_rk3588 -t ${RK3588_VERSION} .
 docker push ${RK3588_VERSION}
+
+# arm64(jetson, JetPack 6)
+# A separate base from the arm64 half of the manifest above, which is a JetPack
+# 4.6 rootfs. An L4T container only runs on the BSP it was built for, so the two
+# cannot be one image and the suffix is what picks between them.
+JP6_VERSION=${VERSION_BASE}-jp6
+echo Building $JP6_VERSION
+docker build --platform linux/arm64 -f Dockerfile.base_arm64_jp6 -t ${JP6_VERSION} .
+docker push ${JP6_VERSION}

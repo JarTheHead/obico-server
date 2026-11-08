@@ -38,9 +38,12 @@ docker build --tag thespaghettidetective/ml_api_base:1.4 -f ml_api/Dockerfile.ba
 
 # NVIDIA Jetson / L4T (arm64)
 docker build --tag thespaghettidetective/ml_api_base:1.4 -f ml_api/Dockerfile.base_arm64 ml_api
+
+# NVIDIA Jetson / L4T, JetPack 6 (arm64)
+docker build --tag thespaghettidetective/ml_api_base:1.4-jp6 -f ml_api/Dockerfile.base_arm64_jp6 ml_api
 ```
 
-RK3588 is the exception: its tag carries a `-rk3588` suffix, which `docker-compose-rk3588.yml` passes as `IMAGE_TAG_SUFFIX` to select it. See [building_docker_images.md](building_docker_images.md) for that variant. The build asks whether `rknn-toolkit-lite2` imports in the base rather than trusting the tag, so the RKNN weights follow what the image can actually read whatever you called it.
+Two targets are the exception, because their tags carry a suffix rather than being the plain `1.4`: `-rk3588`, which `docker-compose-rk3588.yml` passes as `IMAGE_TAG_SUFFIX` to select it, and `-jp6`, which `scripts/install_on_jetson_jp6.sh` passes for a board on JetPack 6. See [building_docker_images.md](building_docker_images.md) for those variants. The build asks whether `rknn-toolkit-lite2` imports in the base rather than trusting the tag, so the RKNN weights follow what the image can actually read whatever you called it.
 
 `./scripts/build_base_images.sh -v 1.4 -p <your-prefix>` (from `ml_api`) builds every target and assembles the multi-arch manifest, but it is a maintainer tool: it pushes each image as it goes, so it needs a registry you can write to, and its output only feeds a build whose `FROM` you have also edited. For local work use the single `docker build` above.
 
